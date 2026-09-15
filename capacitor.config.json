@@ -1,0 +1,8 @@
+{
+  "appId": "com.rutasyparadas.app",
+  "appName": "Rutas y Paradas",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
