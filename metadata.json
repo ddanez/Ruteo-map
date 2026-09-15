@@ -1,0 +1,6 @@
+{
+  "name": "Rastreador de Rutas y Paradas",
+  "description": "Traza tu camino en tiempo real y registra puntos con sus datos: nombre, frecuencia de visita, fotos y comentarios personales.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
