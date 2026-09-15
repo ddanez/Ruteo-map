@@ -48,17 +48,27 @@ jobs:
 
       - name: Configurar permisos en AndroidManifest.xml (GPS, Cámara e Internet)
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if [ -f "$MANIFEST" ]; then
-            # Insertar permisos necesarios para GPS y fotos antes de </manifest>
-            sed -i '/<\/manifest>/i \
-    <uses-permission android:name="android.permission.INTERNET" />\
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\
-    <uses-permission android:name="android.permission.CAMERA" />\
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' "$MANIFEST"
-          fi
+          node -e '
+            const fs = require("fs");
+            const file = "android/app/src/main/AndroidManifest.xml";
+            if (fs.existsSync(file)) {
+              let content = fs.readFileSync(file, "utf8");
+              const perms = [
+                "<uses-permission android:name=\"android.permission.INTERNET\" />",
+                "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />",
+                "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />",
+                "<uses-permission android:name=\"android.permission.CAMERA\" />",
+                "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />",
+                "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />"
+              ];
+              const missing = perms.filter(p => !content.includes(p.match(/name="([^"]+)"/)[1])).join("\n    ");
+              if (missing) {
+                content = content.replace("</manifest>", "    " + missing + "\n</manifest>");
+                fs.writeFileSync(file, content, "utf8");
+                console.log("Permisos agregados correctamente.");
+              }
+            }
+          '
 
       - name: Compilar APK (Gradle)
         run: |
