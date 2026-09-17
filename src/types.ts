@@ -5,6 +5,7 @@ export interface GeoPoint {
   altitude?: number | null;
   speed?: number | null;
   accuracy?: number | null;
+  isGapStart?: boolean; // Indicates a break or gap before this point (e.g. signal loss or screen off)
 }
 
 export type VisitFrequency =

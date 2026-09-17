@@ -29,6 +29,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const pathPolylineRef = useRef<L.Polyline | null>(null);
   const pathGlowPolylineRef = useRef<L.Polyline | null>(null);
+  const gapPolylineRef = useRef<L.Polyline | null>(null);
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -86,6 +87,16 @@ export const MapView: React.FC<MapViewProps> = ({
     }).addTo(map);
     pathPolylineRef.current = pathMain;
 
+    const pathGap = L.polyline([], {
+      color: '#f59e0b',
+      weight: 2.5,
+      opacity: 0.8,
+      dashArray: '6, 8',
+      lineCap: 'round',
+      lineJoin: 'round',
+    }).addTo(map);
+    gapPolylineRef.current = pathGap;
+
     // Map click handler
     map.on('click', (e: L.LeafletMouseEvent) => {
       onMapClickAdd(e.latlng.lat, e.latlng.lng);
@@ -130,12 +141,33 @@ export const MapView: React.FC<MapViewProps> = ({
     tileLayerRef.current = newTiles;
   }, [mapStyle]);
 
-  // Update Path Polyline
+  // Update Path Polyline with Gap Handling
   useEffect(() => {
     if (!pathPolylineRef.current || !pathGlowPolylineRef.current) return;
-    const latLngs = path.map((p) => [p.lat, p.lng] as [number, number]);
-    pathPolylineRef.current.setLatLngs(latLngs);
-    pathGlowPolylineRef.current.setLatLngs(latLngs);
+
+    const segments: [number, number][][] = [];
+    const gapSegments: [number, number][][] = [];
+    let currentSegment: [number, number][] = [];
+
+    for (let i = 0; i < path.length; i++) {
+      const pt = path[i];
+      if (pt.isGapStart && currentSegment.length > 0) {
+        segments.push(currentSegment);
+        const prevPt = currentSegment[currentSegment.length - 1];
+        gapSegments.push([prevPt, [pt.lat, pt.lng]]);
+        currentSegment = [];
+      }
+      currentSegment.push([pt.lat, pt.lng]);
+    }
+    if (currentSegment.length > 0) {
+      segments.push(currentSegment);
+    }
+
+    pathPolylineRef.current.setLatLngs(segments as any);
+    pathGlowPolylineRef.current.setLatLngs(segments as any);
+    if (gapPolylineRef.current) {
+      gapPolylineRef.current.setLatLngs(gapSegments as any);
+    }
   }, [path]);
 
   // Update Stop Markers

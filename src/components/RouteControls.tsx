@@ -9,7 +9,8 @@ import {
   Zap,
   RotateCcw,
   Download,
-  Upload
+  Upload,
+  ShieldCheck
 } from 'lucide-react';
 
 interface RouteControlsProps {
@@ -24,6 +25,7 @@ interface RouteControlsProps {
   onToggleSimulation: () => void;
   onAddStopAtCurrentLocation: () => void;
   onOpenStopsDrawer: () => void;
+  onOpenPocketMode: () => void;
   onResetRoute: () => void;
   onExportData: () => void;
   onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -42,6 +44,7 @@ export const RouteControls: React.FC<RouteControlsProps> = ({
   onToggleSimulation,
   onAddStopAtCurrentLocation,
   onOpenStopsDrawer,
+  onOpenPocketMode,
   onResetRoute,
   onExportData,
   onImportData,
@@ -173,6 +176,18 @@ export const RouteControls: React.FC<RouteControlsProps> = ({
               </button>
             </>
           )}
+
+          {/* Pocket / Motorcycle Mode Button */}
+          <button
+            id="pocket-mode-btn"
+            type="button"
+            onClick={onOpenPocketMode}
+            className="px-3 py-2 bg-neutral-900 hover:bg-black text-amber-300 border border-neutral-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+            title="Modo Bolsillo / Moto: Pantalla negra de bajo consumo para guardar en el bolsillo sin apagar el GPS"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Modo Bolsillo / Moto</span>
+          </button>
 
           {/* Simulation Toggle */}
           <button

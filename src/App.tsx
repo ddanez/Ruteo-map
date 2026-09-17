@@ -10,7 +10,8 @@ import { StopDetailModal } from './components/StopDetailModal';
 import { StopEditModal } from './components/StopEditModal';
 import { StopsListDrawer } from './components/StopsListDrawer';
 import { ResetRouteModal } from './components/ResetRouteModal';
-import { MapPin, Info, RotateCcw } from 'lucide-react';
+import { PocketModeModal } from './components/PocketModeModal';
+import { MapPin, Info, RotateCcw, ShieldCheck } from 'lucide-react';
 
 const STORAGE_KEY = 'route_tracking_session_v2';
 
@@ -43,6 +44,7 @@ export default function App() {
   const [addingCoords, setAddingCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isStopsDrawerOpen, setIsStopsDrawerOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isPocketModeOpen, setIsPocketModeOpen] = useState(false);
   const [isLocatingGps, setIsLocatingGps] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [statusNotification, setStatusNotification] = useState<string | null>(null);
@@ -139,9 +141,37 @@ export default function App() {
     };
   }, [session.isTracking, session.isPaused]);
 
+  // Keep screen awake while tracking is active if supported by browser/device
+  useEffect(() => {
+    let sentinel: any = null;
+    let isMounted = true;
+
+    if (session.isTracking && !session.isPaused && 'wakeLock' in navigator) {
+      (navigator as any).wakeLock
+        ?.request('screen')
+        .then((s: any) => {
+          if (isMounted) sentinel = s;
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      isMounted = false;
+      if (sentinel) {
+        sentinel.release().catch(() => {});
+      }
+    };
+  }, [session.isTracking, session.isPaused]);
+
   // Geolocation watchPosition
   const handleLocationUpdate = useCallback((position: GeolocationPosition) => {
     const { latitude, longitude, altitude, speed, accuracy } = position.coords;
+
+    // Discard highly inaccurate initial fixes or indoor noise (> 45 meters) to prevent route distortion
+    if (accuracy && accuracy > 45) {
+      return;
+    }
+
     const newPoint: GeoPoint = {
       lat: latitude,
       lng: longitude,
@@ -168,9 +198,26 @@ export default function App() {
         if (deltaKm < 0.004) {
           return prev;
         }
+
+        // Gap detection: if more than 35s passed and jump is over 120m,
+        // it means the device was asleep / screen was off / lost GPS signal.
+        const timeDiffSec = (newPoint.timestamp - lastPoint.timestamp) / 1000;
+        const isGap = timeDiffSec > 35 && deltaKm > 0.12;
+
+        const pointToAdd: GeoPoint = {
+          ...newPoint,
+          isGapStart: isGap,
+        };
+
+        if (isGap) {
+          setTimeout(() => {
+            showNotification('Pausa de señal o pantalla apagada detectada. En moto, activa el "Modo Bolsillo" para evitar saltos rectos.');
+          }, 100);
+        }
+
         return {
           ...prev,
-          path: [...prev.path, newPoint],
+          path: [...prev.path, pointToAdd],
           totalDistanceKm: prev.totalDistanceKm + deltaKm,
         };
       } else {
@@ -324,6 +371,32 @@ export default function App() {
     const targetLng = currentLocation?.lng || -9.2810;
     setAddingCoords({ lat: targetLat, lng: targetLng });
     setEditingStop(null);
+  };
+
+  const handleQuickAddStopInPocketMode = () => {
+    const lat = currentLocation?.lat || (session.path.length > 0 ? session.path[session.path.length - 1].lat : 42.8905);
+    const lng = currentLocation?.lng || (session.path.length > 0 ? session.path[session.path.length - 1].lng : -9.2810);
+    const newIndex = session.stops.length + 1;
+    const timeStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+    const newStop: RouteStop = {
+      id: `stop-${Date.now()}`,
+      name: `Parada #${newIndex} (${timeStr})`,
+      visitFrequency: 'Ocasional',
+      photos: [],
+      notes: 'Marcada rápidamente desde el Modo Moto.',
+      lat,
+      lng,
+      createdAt: Date.now(),
+      distanceFromStartKm: session.totalDistanceKm,
+    };
+
+    setSession((prev) => ({
+      ...prev,
+      stops: [...prev.stops, newStop],
+    }));
+
+    showNotification(`Parada #${newIndex} guardada con éxito.`);
   };
 
   const handleMapClickAdd = (lat: number, lng: number) => {
@@ -588,6 +661,22 @@ export default function App() {
           onRequestLocateUser={() => requestUserLocation()}
         />
 
+        {/* Floating Quick Pocket Mode Launcher when Tracking */}
+        {session.isTracking && !isPocketModeOpen && (
+          <div className="absolute top-3 right-16 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 z-10 pointer-events-auto">
+            <button
+              id="floating-pocket-mode-btn"
+              type="button"
+              onClick={() => setIsPocketModeOpen(true)}
+              className="px-3.5 py-1.5 bg-neutral-950/90 text-amber-300 backdrop-blur-md rounded-full text-xs font-bold shadow-xl border border-amber-400/40 flex items-center gap-1.5 hover:bg-black active:scale-95 transition cursor-pointer"
+              title="Activar pantalla negra para guardar el móvil en el bolsillo sin cortar el GPS"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Modo Bolsillo / Moto</span>
+            </button>
+          </div>
+        )}
+
         {/* Dynamic Toast / Status Notification */}
         {statusNotification && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-200">
@@ -613,6 +702,7 @@ export default function App() {
           onToggleSimulation={toggleSimulation}
           onAddStopAtCurrentLocation={handleAddStopAtCurrent}
           onOpenStopsDrawer={() => setIsStopsDrawerOpen(true)}
+          onOpenPocketMode={() => setIsPocketModeOpen(true)}
           onResetRoute={handleResetRoute}
           onExportData={handleExportData}
           onImportData={handleImportData}
@@ -676,6 +766,19 @@ export default function App() {
         stopsCount={session.stops.length}
         totalDistanceKm={session.totalDistanceKm}
         isLocating={isLocatingGps}
+      />
+
+      {/* Pocket Mode / Motorcycle AMOLED HUD with Touch Protection */}
+      <PocketModeModal
+        isOpen={isPocketModeOpen}
+        onClose={() => setIsPocketModeOpen(false)}
+        currentLocation={currentLocation}
+        totalDistanceKm={session.totalDistanceKm}
+        elapsedSeconds={elapsedSeconds}
+        isTracking={session.isTracking}
+        isPaused={session.isPaused}
+        onQuickAddStop={handleQuickAddStopInPocketMode}
+        stopsCount={session.stops.length}
       />
     </div>
   );
